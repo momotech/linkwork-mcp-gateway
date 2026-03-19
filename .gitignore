@@ -5,14 +5,22 @@
 *.so
 *.dylib
 bin/
+
 # Test binary
 *.test
+
 # Output of the go coverage tool
 *.out
+
+# IDE
 .idea/
 .vscode/
-### Mac OS ###
-.DS_Store
+*.swp
+*.swo
 
-### Local Docs (Do not commit) ###
+# OS
+.DS_Store
+Thumbs.db
+
+# Local Docs (Do not commit)
 /docs/
