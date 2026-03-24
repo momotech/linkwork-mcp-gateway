@@ -1,0 +1,22 @@
+server:
+  port: 9080
+
+webService:
+  baseUrl: "http://localhost:8080"
+  registrySyncInterval: 60s
+  taskValidateTTL: 2h
+
+dns:
+  internal: ""
+  office: ""
+  virtualHosts:
+    k8s-node.example.internal: "127.0.0.1"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+proxy:
+  sseTimeout: 5m
+  maxRequestBody: 10485760
