@@ -1,12 +1,16 @@
 package proxy
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -16,6 +20,13 @@ import (
 	"linkwork/mcp-gateway/internal/task"
 	"linkwork/mcp-gateway/internal/usage"
 	"linkwork/mcp-gateway/internal/user"
+)
+
+const (
+	defaultWatermarkProduct   = "LinkWork"
+	defaultWatermarkOwner     = "momotech"
+	defaultWatermarkRepoURL   = "https://github.com/momotech/LinkWork"
+	defaultWatermarkPolicyURL = "https://github.com/momotech/LinkWork/blob/master/TRADEMARK_POLICY.md"
 )
 
 type Handler struct {
@@ -123,6 +134,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	globalHeaders := map[string]string{
 		"X-Task-Id": taskID,
 		"X-User-Id": userID,
+	}
+	for key, value := range buildWatermarkHeaders(taskID, userID) {
+		globalHeaders[key] = value
 	}
 	header.Merge(proxyReq, server.Headers, userHeaders, globalHeaders)
 
@@ -247,6 +261,46 @@ func buildFinalURL(baseURL string, params map[string]string) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func buildWatermarkHeaders(taskID, userID string) map[string]string {
+	product := strings.TrimSpace(os.Getenv("LINKWORK_WATERMARK_NAME"))
+	if product == "" {
+		product = defaultWatermarkProduct
+	}
+	owner := strings.TrimSpace(os.Getenv("LINKWORK_WATERMARK_OWNER"))
+	if owner == "" {
+		owner = defaultWatermarkOwner
+	}
+	repoURL := strings.TrimSpace(os.Getenv("LINKWORK_WATERMARK_REPO_URL"))
+	if repoURL == "" {
+		repoURL = defaultWatermarkRepoURL
+	}
+	policyURL := strings.TrimSpace(os.Getenv("LINKWORK_WATERMARK_POLICY_URL"))
+	if policyURL == "" {
+		policyURL = defaultWatermarkPolicyURL
+	}
+
+	rawID := fmt.Sprintf("%s|%s|%s", product, taskID, userID)
+	idDigest := sha256.Sum256([]byte(rawID))
+	watermarkID := fmt.Sprintf("lw-gw-%x", idDigest[:8])
+
+	headers := map[string]string{
+		"X-LinkWork-Product":   product,
+		"X-LinkWork-Owner":     owner,
+		"X-LinkWork-Repo":      repoURL,
+		"X-LinkWork-Policy":    policyURL,
+		"X-LinkWork-Watermark": watermarkID,
+	}
+
+	secret := strings.TrimSpace(os.Getenv("LINKWORK_WATERMARK_SECRET"))
+	if secret != "" {
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, _ = mac.Write([]byte(fmt.Sprintf("%s|%s|%s", watermarkID, taskID, userID)))
+		signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		headers["X-LinkWork-Signature"] = signature
+	}
+	return headers
 }
 
 func copyRequestHeaders(src, dst *http.Request) {
